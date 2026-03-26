@@ -34,10 +34,10 @@ Unauthorized access leads to data leakage and account takeovers, resulting in fi
 
 ### Practical Example
 The endpoint fails to check if the requester is authorized to see the specific Employee ID.
-![BOLA Vulnerable Request Example](images/bola_vulnerable.png)
+![BOLA Vulnerable](../images/BOLA_V.png)
 
 **The Fix:** Developer "Bob" implements an authorization mechanism using **Access Tokens** in the header.
-![BOLA Secured Request Example](images/bola_secured.png)
+![BOLA Secured](../images/BOLA_S.png)
 *Adding the token correctly produces a **403 Forbidden** error for unauthorized requests.*
 
 ### Mitigation
@@ -56,10 +56,10 @@ Attackers can compromise sessions, masquerade as authorized users, and perform a
 
 ### Practical Example
 The vulnerable endpoint `/apirule2/user/login_v` only validated the **email** and ignored the **password** field in the query.
-![BUA Vulnerable Login Example](images/BUA_v.png)
+![BUA Vulnerable](../images/BUA_V.png)
 
 **The Fix:** The updated `/apirule2/user/login_s` endpoint validates both email and password.
-![BUA Secured Login Example](images/BUA_S.png)
+![BUA Secured](../images/BUA_S.png)
 
 ### Mitigation
 * Use high-entropy passwords and MFA.
@@ -78,10 +78,10 @@ Attackers sniff traffic to find account numbers, phone numbers, and access token
 
 ### Practical Example
 The endpoint `/apirule3/comment_v/{id}` fetches all database info (location, device info) instead of just the comment text.
-![Excessive Data Exposure Vulnerable API Response](images/EDE_V.png)
+![EDA Vulnerable](../images/EDA_V.png)
 
 **The Fix:** The updated `/apirule3/comment_s/{id}` returns only necessary information.
-![Excessive Data Exposure Secured API Response](images/EDE_S.png)
+![EDA Secured](../images/EDA_S.png)
 
 ### Mitigation
 * Never rely on the front-end to filter sensitive data.
@@ -99,10 +99,10 @@ Targeting **Availability**, this causes downtime, financial loss (e.g., via paid
 
 ### Practical Example
 Bob's "Forgot Password" endpoint `/apirule4/sendOTP_v` had no limit. An attacker could script thousands of emails, draining the company's email marketing budget.
-![Rate Limiting Vulnerable (brute force attack)](images/Rate_Vuln.png)
+![Rate Limiting Vulnerable](../images/Rate_Vuln.png)
 
 **The Fix:** Bob enabled rate limiting (`/apirule4/sendOTP_s`), forcing a 2-minute wait between requests.
-![Rate Limiting Secured (account lockout)](images/Rate_Sec.png)
+!![Rate Limiting Vulnerable](../images/Rate_Sec.png)
 
 ### Mitigation
 * Use **Captchas** to prevent automated bot scripts.
@@ -120,10 +120,10 @@ Attackers gain administrative rights, allowing them to delete users, change sett
 
 ### Practical Example
 Alice (HR) is a non-admin, but by manually setting a custom header `isAdmin=1`, she can access the admin-only endpoint `/apirule5/users_v`.
-![BFLA Vulnerable (Alice accessing admin data)](images/BFLA_V.png)
+![BFLA Vulnerable](../images/BFLA_V.png)
 
 **The Fix:** The endpoint `/apirule5/users_s` validates the user's role in the database regardless of what the header says.
-![BFLA Secured (Alice denied admin data)](images/BFLA_S.png)
+![BFLA Vulnerable](../images/BFLA_S.png)
 
 ### Mitigation
 * Deny all access by default.
