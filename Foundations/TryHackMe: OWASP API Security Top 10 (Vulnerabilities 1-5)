@@ -1,141 +1,174 @@
-A detailed write-up covering the fundamentals of API security and a deep dive into the first five risks of the OWASP API Top 10.
+🌐 What is an API and why is it important?
+API stands for Application Programming Interface. It functions as middleware that facilitates communication between two software components using a set of protocols and definitions.
 
----
-
-## 🌐 What is an API and why is it important?
-
-**API** stands for **Application Programming Interface**. It functions as middleware that facilitates communication between two software components using a set of protocols and definitions.
-
-* **Application:** Any software with specific functionality.
-* **Interface:** The service contract between two apps that makes communication possible via requests and responses.
-* **Documentation:** Information on how developers have structured those responses and requests.
+Application: Any software with specific functionality.
+Interface: The service contract between two apps that makes communication possible via requests and responses.
+Documentation: Information on how developers have structured those responses and requests.
 
 APIs are the essential building blocks for developing complex, enterprise-level applications.
 
----
+🚨 Notable Data Breaches Through APIs
+DateTargetImpactJune 2021LinkedIn700 million users' data scraped via API, including emails, phone numbers, and geolocation.June 2022Twitter5.4 million users impacted by a zero-day vulnerability linking handles to private contact info.Jan 2021PIXLR1.9 million users' data dumped on the dark web, including hashed passwords.
 
-## 🚨 Notable Data Breaches Through APIs
-
-| Date | Target | Impact |
-| :--- | :--- | :--- |
-| **June 2021** | **LinkedIn** | 700 million users' data scraped via API, including emails, phone numbers, and geolocation. |
-| **June 2022** | **Twitter** | 5.4 million users impacted by a zero-day vulnerability linking handles to private contact info. |
-| **Jan 2021** | **PIXLR** | 1.9 million users' data dumped on the dark web, including hashed passwords. |
-
----
-
-## 1. Broken Object Level Authorization (BOLA)
-
-### How it happens
-API endpoints often use **object identifiers** to retrieve data. BOLA (similar to **IDOR**) occurs when a user provides an ID they aren't authorized to see, and the server fails to validate ownership of that resource at the code level.
-
-### Impact
+1. Broken Object Level Authorization (BOLA)
+How it happens
+API endpoints often use object identifiers to retrieve data. BOLA (similar to IDOR) occurs when a user provides an ID they aren't authorized to see, and the server fails to validate ownership of that resource at the code level.
+Impact
 Unauthorized access leads to data leakage and account takeovers, resulting in financial loss and brand damage.
+Practical Example
+❌ Vulnerable: The endpoint accepts any user ID without checking if the requester owns it.
+GET http://localhost:80/MHT/apirule1_v/user/1
 
-### Practical Example
-The endpoint fails to check if the requester is authorized to see the specific Employee ID.
-![BOLA Vulnerable](../images/BOLA_V.png)
+Response: 200 OK
+{
+  "id": 1,
+  "username": "John",
+  "name": "Scott",
+  "flag": "THM{00123123}"
+}
+Any authenticated user can swap the 1 for another ID and retrieve someone else's data — including sensitive fields like flags and personal info.
+✅ Secured: The endpoint now requires an Authorization Token in the header.
+GET http://localhost:80/MHT/apirule1_s/user/1
+Headers: Authorization-Token: bWljaGFlbM6NjAhZUg+UnQ9ZCctOkhlbGxv
+
+Response: 403 Forbidden
+{
+  "success": "false",
+  "cause": "Invalid Authorization Token"
+}
+Without a valid token tied to that user, the request is rejected.
+Mitigation
+
+Implement strict access controls and validate user ownership on every request.
+Use unpredictable, random values (UUIDs) for object identifiers instead of sequential integers.
 
 
-
-**The Fix:** Developer "Bob" implements an authorization mechanism using **Access Tokens** in the header.
-![BOLA Secured](../images/BOLA_S.png)
-
-*Adding the token correctly produces a **403 Forbidden** error for unauthorized requests.*
-
-### Mitigation
-* Implement strict access controls and check user hierarchies.
-* Use unpredictable, random values (UUIDs) for tokens.
-
----
-
-## 2. Broken User Authentication (BUA)
-
-### How it happens
+2. Broken User Authentication (BUA)
+How it happens
 BUA occurs when authentication logic is flawed (e.g., incorrect SQL queries) or security mechanisms like tokens/headers are missing, allowing attackers to escalate privileges.
-
-### Impact
+Impact
 Attackers can compromise sessions, masquerade as authorized users, and perform a full account takeover.
+Practical Example
+❌ Vulnerable: The login endpoint only validates the email and completely ignores the password field.
+POST http://localhost:80/MHT/apirule2/user/login_v
+Body: email=admin@mht.com | password=ANYTHING
 
-### Practical Example
-The vulnerable endpoint `/apirule2/user/login_v` only validated the **email** and ignored the **password** field in the query.
-![BUA Vulnerable](../images/BUA_V.png)
+Response: 200 OK
+{
+  "success": "true",
+  "token": "0g*[v;~$1yx5L15J25sm$nm:cAWZv]"
+}
+An attacker can log in as any user by knowing only their email — the password doesn't matter.
+✅ Secured: The updated endpoint validates both email and password before granting access.
+POST http://localhost:80/MHT/apirule2/user/login_s
+Body: email=admin@mht.com | password=ANYTHING
 
+Response: 401 Unauthorized
+{
+  "success": "false",
+  "cause": "Incorrect Username & Password"
+}
+Mitigation
 
-**The Fix:** The updated `/apirule2/user/login_s` endpoint validates both email and password.
-![BUA Secured](../images/BUA_S.png)
-
-
-### Mitigation
-* Use high-entropy passwords and MFA.
-* Never expose credentials in `GET` or `POST` request parameters.
-* Use strong JWTs and secure password hashing (no plain text).
-
----
-
-## 3. Excessive Data Exposure
-
-### How it happens
-Developers often return a full object from the database, assuming the **front-end** will filter the data. An attacker can intercept the full API response to see sensitive hidden fields.
-
-### Impact
-Attackers sniff traffic to find account numbers, phone numbers, and access tokens not intended for public view.
-
-### Practical Example
-The endpoint `/apirule3/comment_v/{id}` fetches all database info (location, device info) instead of just the comment text.
-![EDA Vulnerable](../images/EDA_V.png)
+Use high-entropy passwords and enforce MFA.
+Never expose credentials in GET or POST request parameters.
+Use strong JWTs and secure password hashing — never store plain text passwords.
 
 
-**The Fix:** The updated `/apirule3/comment_s/{id}` returns only necessary information.
-![EDA Secured](../images/EDA_S.png)
+3. Excessive Data Exposure
+How it happens
+Developers often return a full object from the database, assuming the front-end will filter the data. An attacker can intercept the full API response to see sensitive hidden fields that were never meant to be public.
+Impact
+Attackers sniff traffic to find account numbers, phone numbers, device info, and access tokens not intended for public view.
+Practical Example
+❌ Vulnerable: The endpoint returns the full database record, including sensitive fields like device ID and geolocation.
+GET http://localhost:80/MHT/apirule3/comment_v/1
+
+Response: 200 OK
+{
+  "id": 1,
+  "postid": "1",
+  "deviceid": "Android 12.0",
+  "latitude": "45.5426274",
+  "longitude": "-122.7944111",
+  "commenttext": "This is my First Post",
+  "username": "baduser007"
+}
+The app only displays the comment text on the front-end, but the full API response leaks the user's device and precise location.
+✅ Secured: The endpoint returns only the fields the client actually needs.
+GET http://localhost:80/MHT/apirule3/comment_s/1
+
+Response: 200 OK
+{
+  "postid": "1",
+  "commenttext": "This is my First Post"
+}
+Mitigation
+
+Never rely on the front-end to filter sensitive data — filter it at the API level.
+Avoid generic serialization methods like to_string() or to_json() that dump entire objects.
 
 
-### Mitigation
-* Never rely on the front-end to filter sensitive data.
-* Avoid generic methods like `to_string()` or `to_json()`.
+4. Lack of Resources & Rate Limiting
+How it happens
+APIs fail to restrict the frequency of requests or the size of payloads. This opens the door to Denial of Service (DoS) attacks or excessive resource consumption across network, storage, and compute.
+Impact
+Targeting Availability, this causes service downtime, financial loss (especially via paid API services like email or SMS), and serious brand damage.
+Practical Example
+❌ Vulnerable: The "Forgot Password" endpoint sends an OTP with no restrictions on how many times it can be called.
+POST http://localhost:80/MHT/apirule4/sendOTP_v
+Body: email=test@gmail.com
 
----
+Response: 200 OK
+{
+  "success": "true",
+  "msg": "4 Digit OTP sent on Email."
+}
+An attacker can script this to fire thousands of requests, flooding a victim's inbox and running up the company's email marketing bill.
+✅ Secured: The updated endpoint enforces a 2-minute cooldown between OTP requests per email address.
+POST http://localhost:80/MHT/apirule4/sendOTP_s
+Body: email=test@gmail.com
 
-## 4. Lack of Resources & Rate Limiting
+Response: 200 OK  (first request)
+{
+  "success": "true",
+  "msg": "4 Digit OTP sent on Email."
+}
 
-### How it happens
-APIs fail to restrict the frequency of requests or file sizes. This leads to **Denial of Service (DoS)** or excessive resource costs (network, storage, compute).
+Subsequent requests within 2 minutes → 429 Too Many Requests
+Mitigation
 
-### Impact
-Targeting **Availability**, this causes downtime, financial loss (e.g., via paid API services), and brand damage.
-
-### Practical Example
-Bob's "Forgot Password" endpoint `/apirule4/sendOTP_v` had no limit. An attacker could script thousands of emails, draining the company's email marketing budget.
-![Rate Limiting Vulnerable](../images/Rate_Vuln.png)
-
-
-**The Fix:** Bob enabled rate limiting (`/apirule4/sendOTP_s`), forcing a 2-minute wait between requests.
-![Rate Limiting Secured](../images/Rate_Sec.png)
-
-
-### Mitigation
-* Use **Captchas** to prevent automated bot scripts.
-* Define maximum data sizes for all payloads and string lengths.
-
----
-
-## 5. Broken Function Level Authorization (BFLA)
-
-### How it happens
-A low-privileged user bypasses checks to access administrative functions. This happens when there is a vague separation between regular and admin roles in the API logic.
-
-### Impact
-Attackers gain administrative rights, allowing them to delete users, change settings, or access sensitive HR data.
-
-### Practical Example
-Alice (HR) is a non-admin, but by manually setting a custom header `isAdmin=1`, she can access the admin-only endpoint `/apirule5/users_v`.
-![BFLA Vulnerable](../images/BFLA_V.png)
+Use CAPTCHAs to block automated bot scripts.
+Define maximum payload sizes and string lengths on all endpoints.
+Return 429 Too Many Requests with a Retry-After header when limits are hit.
 
 
-**The Fix:** The endpoint `/apirule5/users_s` validates the user's role in the database regardless of what the header says.
-![BFLA Secured](../images/BFLA_S.png)
+5. Broken Function Level Authorization (BFLA)
+How it happens
+A low-privileged user bypasses access checks to reach administrative functions. This typically happens when there is a vague or missing separation between regular user and admin roles in the API logic.
+Impact
+Attackers gain administrative rights, allowing them to delete users, change system settings, or access sensitive data such as HR records and internal reports.
+Practical Example
+❌ Vulnerable: The endpoint trusts a client-supplied header to determine admin status.
+GET http://localhost:80/MHT/apirule5/users_v
+Headers: Authorization: YWxpY2U... | isAdmin: 1
 
+Response: 200 OK
+[
+  { "id": 1, "username": "admin", "name": "Admin User", "role": "admin" },
+  { "id": 2, "username": "alice", "name": "Alice" }
+]
+Alice is a regular HR employee, but by manually adding isAdmin: 1 to her request headers, she gains full admin access to all user records.
+✅ Secured: The endpoint ignores the client-supplied header and validates the user's actual role in the database.
+GET http://localhost:80/MHT/apirule5/users_s
+Headers: Authorization: YWxpY2U... | isAdmin: 1
 
-### Mitigation
-* Deny all access by default.
-* Verify user roles/groups on the server side for every sensitive function.
+Response: 403 Forbidden
+{
+  "success": "false",
+  "cause": "You are not an Admin"
+}
+Mitigation
+
+Deny all access by default — explicitly grant only what is needed.
+Always verify user roles and group membership server-side for every sensitive function, never trust client-supplied values.
