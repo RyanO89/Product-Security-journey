@@ -34,7 +34,7 @@ Unauthorized access leads to data leakage and account takeovers, resulting in fi
 
 ### Practical Example
 The endpoint fails to check if the requester is authorized to see the specific Employee ID.
-![BOLA Vulnerable](../images/BOLA_V.png)
+![BOLA Vulnerable](https://raw.githubusercontent.com/RyanO89/Product-Security-journey/main/images/BOLA_V.png)
 
 
 
