@@ -1,0 +1,269 @@
+Vulnerability 6 — Mass Assignment
+How Does It Happen?
+Mass assignment occurs when client-side data is automatically bound to server-side objects or class variables without proper filtering. Attackers exploit this by studying an application's business logic and sending crafted payloads to manipulate fields they shouldn't have access to — such as isAdmin, credit, or role.
+Likely Impact
+
+Privilege escalation (regular user → administrator)
+Data tampering
+
+Practical Example
+Imagine a user profile update endpoint. The legitimate request looks like this:
+json// Legitimate request
+PATCH /api/user/profile
+{
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+But a malicious actor sends this:
+json// Malicious request
+PATCH /api/user/profile
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "credit": 10000,
+  "isAdmin": true,
+  "role": "administrator"
+}
+Vulnerable Laravel controller (❌ Bad):
+php// apirule6/user — No filtering, binds everything from request
+public function updateProfile(Request $request) {
+    $user = Auth::user();
+    $user->update($request->all()); // ❌ Binds ALL input including credit, isAdmin
+    return response()->json(['message' => 'Profile updated']);
+}
+Secure Laravel controller (✅ Fixed):
+php// apirule6/user_s — Explicit allowlist of safe fields
+public function updateProfile(Request $request) {
+    $user = Auth::user();
+    $user->update([
+        'name'  => $request->name,
+        'email' => $request->email,
+        // credit defaults to 50 regardless of what client sends
+        'credit' => $user->credit ?? 50,
+    ]);
+    return response()->json(['message' => 'Profile updated']);
+}
+Mitigation Measures
+
+Study how your framework handles backend insertions/updates before using them (e.g. Laravel's $fillable and $guarded arrays)
+Avoid functions that automatically bind client input to code variables
+Allowlist only the properties that are safe to update from the client side
+Never expose internal model attributes like role, isAdmin, or credit without explicit validation
+
+
+Vulnerability 7 — Security Misconfiguration
+How Does It Happen?
+Security misconfiguration results from improperly configured security controls — things like verbose error messages, publicly accessible API documentation, open cloud storage, or misconfigured CORS policies. Attackers use these gaps to profile the system and plan targeted attacks.
+Likely Impact
+
+Full system profiling by attackers
+Bypass of security mechanisms
+Disclosure of internal architecture, file paths, and credentials via stack traces
+
+Practical Example
+A misconfigured API exposes a full stack trace on error:
+json// ❌ Misconfigured response to /api/ping (500 error)
+{
+  "error": "SQLSTATE[42S02]: Base table or view not found",
+  "trace": [
+    "#0 /var/www/html/app/Http/Controllers/PingController.php(34)",
+    "#1 /var/www/html/routes/api.php(22)",
+    "#2 vendor/laravel/framework/src/Illuminate/Routing/Router.php(693)"
+  ],
+  "file": "/var/www/html/app/Http/Controllers/PingController.php",
+  "line": 34
+}
+An attacker now knows your file structure, framework version, controller names, and more.
+Secure error response (✅ Fixed):
+php// apirule7/ping_s — Generic error handling, no internal details
+public function ping() {
+    try {
+        // perform operation
+        DB::table('health')->first();
+        return response()->json(['status' => 'ok']);
+    } catch (\Exception $e) {
+        // Log the real error internally
+        Log::error('Ping check failed: ' . $e->getMessage());
+
+        // Return only a safe, generic message to the client
+        return response()->json(['status' => 'Service unavailable'], 503);
+    }
+}
+Mitigation Measures
+
+Limit admin interface access to authorised users only
+Disable default usernames and passwords on all public-facing devices
+Disable directory listing and enforce proper file permissions
+Remove all debug code, error logs, and stack traces from production
+Never expose API documentation, endpoint lists, or changelogs publicly without authentication
+
+
+Vulnerability 8 — Injection
+How Does It Happen?
+Injection attacks remain among the most dangerous and widespread vulnerabilities. They occur when unfiltered user input is passed directly to an interpreter — SQL, OS commands, XML, etc. — allowing attackers to execute unintended operations.
+Likely Impact
+
+Unauthorised data access or full data loss
+Account takeover
+Remote code execution
+Denial of Service (DoS)
+
+Practical Example
+A login endpoint with a SQL injection vulnerability:
+php// ❌ Vulnerable login — raw input in SQL query
+public function login(Request $request) {
+    $username = $request->username;
+    $password = $request->password;
+
+    $user = DB::select("SELECT * FROM users WHERE username = '$username' AND password = '$password'");
+    // ...
+}
+An attacker sends:
+username: admin' OR '1'='1
+password: anything
+This transforms the query into:
+sqlSELECT * FROM users WHERE username = 'admin' OR '1'='1' AND password = 'anything'
+-- Returns all users; attacker is authenticated as admin
+Secure parameterised query (✅ Fixed):
+php// apirule8/user/login_s — Parameterised queries + Laravel validation
+public function login(Request $request) {
+    $request->validate([
+        'username' => 'required|string|max:50',
+        'password' => 'required|string|min:8',
+    ]);
+
+    // Parameterised query — input is NEVER interpolated into SQL
+    $user = DB::select(
+        'SELECT * FROM users WHERE username = ? AND password = ?',
+        [$request->username, hash('sha256', $request->password)]
+    );
+
+    if (empty($user)) {
+        return response()->json(['error' => 'Invalid credentials'], 401);
+    }
+
+    return response()->json(['token' => Auth::login($user[0])]);
+}
+Mitigation Measures
+
+Use a well-known library for client-side and server-side input validation
+Always validate, filter, and sanitise client-provided data before processing
+Use parameterised queries or prepared statements for all database operations
+Add WAF (Web Application Firewall) rules to catch injection attempts at the network level
+Use ORM frameworks (Laravel Eloquent, Hibernate) which handle sanitisation by default
+
+
+Vulnerability 9 — Improper Assets Management
+How Does It Happen?
+Improper asset management occurs when old or deprecated API versions are left running alongside newer ones. The older versions often lack the latest security patches, making them easy targets. This typically results from incomplete API documentation or failure to follow a proper Software Development Life Cycle (SDLC).
+Likely Impact
+
+Unauthorised access via unpatched legacy endpoints
+Full system compromise through a shared database
+
+Practical Example
+The v1 API endpoint still exists and lacks authentication enforced in v2:
+bash# ✅ New secure endpoint (requires auth token)
+POST /api/v2/user/login
+Authorization: Bearer <token>
+
+# ❌ Old endpoint still active — no token required, no rate limiting
+POST /api/v1/user/login
+# No auth required — attacker brute-forces or dumps data freely
+A real-world test:
+bash# Attacker probes for legacy versions
+curl -X POST https://api.example.com/apirule9/v1/user/login \
+  -d '{"username":"admin","password":"password123"}'
+
+# Response — still works because v1 was never decommissioned
+{"token": "eyJhbGc..."}
+Mitigation — block old versions at the network level (Nginx example):
+nginx# Deny access to deprecated API versions
+location ~* ^/api/v[0-9]+/ {
+    if ($request_uri ~* "^/api/v1/") {
+        return 410 '{"error": "This API version has been deprecated"}';
+    }
+}
+Secure current endpoint (✅ apirule9/v2):
+php// New endpoint with proper auth middleware, rate limiting, and logging
+Route::middleware(['auth:api', 'throttle:60,1'])->group(function () {
+    Route::post('/v2/user/login', [AuthController::class, 'login']);
+});
+Mitigation Measures
+
+Block deprecated API endpoints at the network level — don't rely on application-level redirects
+Host development, QA, and production APIs on separate servers with separate credentials
+Document all API aspects — authentication, CORS policy, rate limiting, error responses
+Adopt OpenAPI/Swagger to auto-generate and maintain up-to-date documentation
+Maintain a versioning policy and communicate clear deprecation timelines to consumers
+
+
+Vulnerability 10 — Insufficient Logging and Monitoring
+How Does It Happen?
+When attacks occur, the ability to investigate them depends entirely on the quality of your logs. Many organisations log infrastructure events (network, server) but neglect API-level logging. Without request metadata — IP address, endpoint, input data, timestamps — it becomes impossible to identify attackers or understand what happened.
+Likely Impact
+
+Inability to identify or attribute an attack
+Extended breach windows (attackers dwell undetected for weeks or months)
+Failure to meet compliance requirements (GDPR, PCI-DSS, etc.)
+
+Practical Example
+No logging (❌ Bad) — attacker leaves no trace:
+php// apirule10/no-logging — zero visibility
+public function sensitiveAction(Request $request) {
+    // Action performed, nothing recorded
+    $data = User::find($request->user_id);
+    return response()->json($data);
+}
+With proper logging (✅ Fixed):
+php// apirule10/logging — captures metadata for each request
+public function sensitiveAction(Request $request) {
+    // Capture user metadata
+    $logEntry = [
+        'timestamp'    => now()->toISOString(),
+        'ip_address'   => $request->ip(),
+        'user_agent'   => $request->userAgent(),
+        'endpoint'     => $request->path(),
+        'method'       => $request->method(),
+        'user_id'      => Auth::id() ?? 'unauthenticated',
+        'input_params' => $request->except(['password', 'token']), // Never log secrets
+        'status'       => 'success',
+    ];
+
+    // Save to database
+    ApiLog::create($logEntry);
+
+    // Forward to SIEM (e.g. Splunk, Elastic SIEM) for correlation
+    Log::channel('siem')->info('API access', $logEntry);
+
+    $data = User::find($request->user_id);
+    return response()->json($data);
+}
+Example log entry written to SIEM:
+json{
+  "timestamp": "2024-11-14T09:42:11Z",
+  "ip_address": "203.0.113.42",
+  "user_agent": "Mozilla/5.0 (compatible; attacker-bot/1.0)",
+  "endpoint": "api/user/profile",
+  "method": "GET",
+  "user_id": "unauthenticated",
+  "input_params": { "user_id": "1" },
+  "status": "denied"
+}
+Patterns like repeated denied entries from a single IP trigger automated alerts, enabling rapid response.
+Mitigation Measures
+
+Implement a SIEM (e.g. Splunk, IBM QRadar, Elastic Security) for log aggregation and correlation
+Log all denied accesses, failed authentication attempts, and input validation errors with enough detail to identify the actor
+Treat logs as sensitive data — encrypt them at rest and in transit, and restrict access
+Set up custom alerts for anomalous patterns: brute-force attempts, unusual access times, privilege escalation
+Ensure log integrity — use append-only storage or cryptographic signing to prevent tampering
+
+
+Summary Table
+#VulnerabilityRoot CauseKey Fix6Mass AssignmentBinding all client input to modelExplicit allowlists ($fillable)7Security MisconfigurationVerbose errors, open endpointsGeneric errors, disable debug in prod8InjectionUnfiltered input in queriesParameterised queries, input validation9Improper Assets ManagementOld API versions left activeBlock deprecated endpoints at network level10Insufficient Logging & MonitoringNo audit trailSIEM integration, structured logging
+
+Final Thoughts
+API security is not a one-time configuration — it requires continuous attention across the full development lifecycle. The vulnerabilities covered here share a common thread: they arise when developers prioritise speed over safety, skipping input validation, leaving old infrastructure running, or disabling logging to reduce noise.
+
+Modules like sign-in, role-based access, and user profile settings deserve the most scrutiny — they are the most frequently targeted entry points into any system.
